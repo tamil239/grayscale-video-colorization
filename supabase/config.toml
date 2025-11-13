@@ -1,0 +1,4 @@
+project_id = "ndjgiwhlrjnrtktpsere"
+
+[functions.colorize-frame]
+verify_jwt = false
