@@ -6,120 +6,80 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Sparkles } from "lucide-react";
 
-type ProcessingStatus = "idle" | "uploading" | "extracting" | "colorizing" | "complete";
+type ProcessingStatusType = "idle" | "uploading" | "colorizing" | "complete";
 
 const Index = () => {
   const { toast } = useToast();
-  const [status, setStatus] = useState<ProcessingStatus>("idle");
+  const [status, setStatus] = useState<ProcessingStatusType>("idle");
   const [progress, setProgress] = useState(0);
   const [originalVideoUrl, setOriginalVideoUrl] = useState<string>("");
-  const [colorizedFrames, setColorizedFrames] = useState<string[]>([]);
-  const [framesProcessed, setFramesProcessed] = useState(0);
-  const [totalFrames, setTotalFrames] = useState(0);
-
-  const extractFrames = async (videoFile: File): Promise<string[]> => {
-    return new Promise((resolve) => {
-      const video = document.createElement("video");
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-      const frames: string[] = [];
-
-      video.src = URL.createObjectURL(videoFile);
-      video.onloadedmetadata = () => {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-
-        const duration = video.duration;
-        const frameInterval = 0.5; // Extract frame every 0.5 seconds
-        const totalFrameCount = Math.floor(duration / frameInterval);
-        setTotalFrames(totalFrameCount);
-
-        let currentTime = 0;
-        const captureFrame = () => {
-          if (currentTime > duration) {
-            URL.revokeObjectURL(video.src);
-            resolve(frames);
-            return;
-          }
-
-          video.currentTime = currentTime;
-          video.onseeked = () => {
-            ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
-            frames.push(canvas.toDataURL("image/jpeg", 0.8));
-            currentTime += frameInterval;
-            setProgress(Math.floor((frames.length / totalFrameCount) * 30)); // 30% for extraction
-            captureFrame();
-          };
-        };
-
-        captureFrame();
-      };
-    });
-  };
-
-  const colorizeFrames = async (frames: string[]) => {
-    const colorized: string[] = [];
-    setStatus("colorizing");
-
-    for (let i = 0; i < frames.length; i++) {
-      try {
-        const { data, error } = await supabase.functions.invoke("colorize-frame", {
-          body: { frame: frames[i] },
-        });
-
-        if (error) {
-          console.error("Colorization error:", error);
-          toast({
-            title: "Colorization Error",
-            description: "Failed to colorize frame. Using original frame.",
-            variant: "destructive",
-          });
-          colorized.push(frames[i]);
-        } else {
-          colorized.push(data.colorizedFrame);
-        }
-
-        setFramesProcessed(i + 1);
-        setProgress(30 + Math.floor(((i + 1) / frames.length) * 70)); // 70% for colorization
-        setColorizedFrames([...colorized]);
-      } catch (error) {
-        console.error("Frame processing error:", error);
-        colorized.push(frames[i]);
-      }
-    }
-
-    return colorized;
-  };
+  const [colorizedFrame, setColorizedFrame] = useState<string>("");
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const handleVideoSelect = async (file: File) => {
     try {
       setStatus("uploading");
-      setProgress(0);
-      setColorizedFrames([]);
+      setColorizedFrame("");
 
       const videoUrl = URL.createObjectURL(file);
       setOriginalVideoUrl(videoUrl);
 
-      setStatus("extracting");
-      const frames = await extractFrames(file);
+      setStatus("idle");
+      
+      toast({
+        title: "Video Uploaded",
+        description: "Pause the video at any frame to colorize it!",
+      });
+    } catch (error) {
+      console.error("Upload error:", error);
+      toast({
+        title: "Upload Failed",
+        description: "An error occurred during video upload.",
+        variant: "destructive",
+      });
+      setStatus("idle");
+    }
+  };
 
-      const colorized = await colorizeFrames(frames);
+  const handleFrameCapture = async (frameDataUrl: string) => {
+    try {
+      setIsProcessing(true);
+      setStatus("colorizing");
+      setProgress(0);
 
+      const { data, error } = await supabase.functions.invoke("colorize-frame", {
+        body: { frame: frameDataUrl },
+      });
+
+      if (error) {
+        console.error("Colorization error:", error);
+        toast({
+          title: "Colorization Error",
+          description: "Failed to colorize frame. Please try again.",
+          variant: "destructive",
+        });
+        setIsProcessing(false);
+        setStatus("idle");
+        return;
+      }
+
+      setColorizedFrame(data.colorizedFrame);
       setStatus("complete");
       setProgress(100);
 
       toast({
         title: "Success!",
-        description: `Successfully colorized ${colorized.length} frames`,
+        description: "Frame colorized successfully",
       });
     } catch (error) {
       console.error("Processing error:", error);
       toast({
         title: "Processing Failed",
-        description: "An error occurred during video processing.",
+        description: "An error occurred during colorization.",
         variant: "destructive",
       });
-      setStatus("idle");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -135,23 +95,20 @@ const Index = () => {
             </h1>
           </div>
           <p className="text-muted-foreground max-w-2xl mx-auto">
-            Transform your grayscale videos into vibrant color using advanced neural networks
-            and deep learning algorithms
+            Upload a video and pause at any frame to colorize it with AI
           </p>
         </div>
 
         {/* Upload Section */}
-        {status === "idle" && (
+        {!originalVideoUrl && (
           <VideoUpload onVideoSelect={handleVideoSelect} isProcessing={false} />
         )}
 
         {/* Processing Status */}
-        {status !== "idle" && status !== "complete" && (
+        {status === "colorizing" && (
           <ProcessingStatus
             status={status}
             progress={progress}
-            framesProcessed={framesProcessed}
-            totalFrames={totalFrames}
           />
         )}
 
@@ -159,8 +116,9 @@ const Index = () => {
         {originalVideoUrl && (
           <VideoComparison
             originalVideo={originalVideoUrl}
-            colorizedFrames={colorizedFrames}
-            isProcessing={status !== "complete"}
+            colorizedFrame={colorizedFrame}
+            isProcessing={isProcessing}
+            onFrameCapture={handleFrameCapture}
           />
         )}
       </div>
