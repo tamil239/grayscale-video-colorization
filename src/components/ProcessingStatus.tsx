@@ -2,17 +2,13 @@ import { Loader2, CheckCircle2, Image } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 
 interface ProcessingStatusProps {
-  status: "idle" | "uploading" | "extracting" | "colorizing" | "complete";
+  status: "idle" | "uploading" | "colorizing" | "complete";
   progress: number;
-  framesProcessed?: number;
-  totalFrames?: number;
 }
 
 export const ProcessingStatus = ({
   status,
   progress,
-  framesProcessed = 0,
-  totalFrames = 0,
 }: ProcessingStatusProps) => {
   const getStatusConfig = () => {
     switch (status) {
@@ -22,23 +18,17 @@ export const ProcessingStatus = ({
           title: "Uploading Video",
           description: "Preparing video for processing...",
         };
-      case "extracting":
-        return {
-          icon: <Image className="w-5 h-5 text-primary" />,
-          title: "Extracting Frames",
-          description: "Analyzing video structure...",
-        };
       case "colorizing":
         return {
           icon: <Loader2 className="w-5 h-5 animate-spin text-primary" />,
           title: "AI Colorization in Progress",
-          description: `Processing frame ${framesProcessed} of ${totalFrames} with neural networks...`,
+          description: "Processing frame with neural networks...",
         };
       case "complete":
         return {
           icon: <CheckCircle2 className="w-5 h-5 text-green-500" />,
           title: "Colorization Complete",
-          description: "Your video is ready!",
+          description: "Frame colorized successfully!",
         };
       default:
         return null;
